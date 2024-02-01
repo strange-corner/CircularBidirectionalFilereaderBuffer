@@ -45,5 +45,5 @@ jobs:
 
       # run unit test
     - name: run unit test
-      working-directory: x64\Release\UnitTest1
+      working-directory: x64\Release\
       run: vstest.console.exe UnitTest1.dll
