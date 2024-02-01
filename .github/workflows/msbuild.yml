@@ -45,5 +45,5 @@ jobs:
 
       # run unit test
     - name: run unit test
-      working-directory: bin\Debug-windows-x86_64\DareUnitTest
+      working-directory: x64\Release\UnitTest1
       run: vstest.console.exe UnitTest1.dll
