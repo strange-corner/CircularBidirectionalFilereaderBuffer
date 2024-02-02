@@ -45,7 +45,7 @@ jobs:
 
       # run unit test
     - name: run unit test
-      uses: microsoft/vstest@master
+      uses: microsoft/vstest@v17.8.0
       with:
           testAssembly: UnitTest1.dll
           searchFolder: x64\Release\
