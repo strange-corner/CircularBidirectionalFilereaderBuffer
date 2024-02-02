@@ -10,6 +10,7 @@ namespace UnitTest1
 
 		TEST_METHOD(Method1) {
 
+			const unsigned int N_ELEMENTS_IN_TESTFILE{8192};
 			const unsigned int CACHE_LEN{ 1024 };
 			FILE *f;
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
@@ -27,11 +28,11 @@ namespace UnitTest1
 				Assert::AreEqual<int>(value + 1, newValue);
 				value = newValue;
 			}
-			Assert::AreEqual<unsigned int>(2048, testee.top_, L"End of file");
-			Assert::AreEqual<unsigned int>(2048 - CACHE_LEN, testee.bottom_, L"End of file");
+			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE, testee.top_, L"End of file");
+			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom_, L"End of file");
 			ok = testee.getPrev(value);
 			Assert::IsTrue(ok);
-			Assert::AreEqual<unsigned int>(2047, value);
+			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - 1, value);
 			while (ok) {
 				printf("%d", value);
 				int newValue;

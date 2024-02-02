@@ -27,4 +27,9 @@
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="testfile.bin">
+      <Filter>Ressourcendateien</Filter>
+    </CopyFileToFolders>
+  </ItemGroup>
 </Project>
