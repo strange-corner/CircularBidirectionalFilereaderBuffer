@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CircularBidirectionalFilereaderBuffer.hpp">
+    <ClInclude Include="..\src\CircularBidirectionalFilereaderBuffer.hpp">
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>
