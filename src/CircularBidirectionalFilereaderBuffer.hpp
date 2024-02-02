@@ -4,6 +4,7 @@
 
 #include <stdio.h> // FILE
 #include <limits>
+#include <mutex>
 
 namespace UnitTest1 {
 	class UnitTest;
@@ -20,9 +21,39 @@ class CircularBidirectionalFilereaderBuffer {
     public:
 
         /**
-         * @param file zum Lesen geöffnete Datei
+         * OK Alles gut
+         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache. Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
+         * END_OF_FILE ele ist der letzte vorhandene Wert in dieser Richtung. Also der letzte in der Datei.
+         * CACHE_OVERFLOWB Kein Wert mehr vorhanden
          */
-        CircularBidirectionalFilereaderBuffer(FILE *file) :  file_(file) {
+        enum class CacheState_t {
+            OK,
+            ALMOST_EMPTY,
+            END_OF_FILE,
+            CACHE_OVERFLOW
+        };
+
+        /**
+         * Interface zur Benachrichtigung, dass der Cache aufgefüllt werden soll. Also, das aus einem
+         * Worker-Task fillUpwards oder fillDownwards aufgerufen werden soll, um neue Werte bereit zu machen
+         */
+        class IBackgroundTaskListener {
+        public:
+
+            virtual ~IBackgroundTaskListener() {}
+
+            /**
+             * @param up true, wenn fillUpwards aufgerufen werden soll. false, wenn fillDownwards aufgerufen werden soll
+             */
+            virtual void requestFill(bool up) = 0;
+        };
+
+        /**
+         * @param file zum Lesen geöffnete Datei
+         * @param listener wird benachrichtigt, wenn der Cache aufgefüllt werden muss
+         */
+        CircularBidirectionalFilereaderBuffer(FILE* file, IBackgroundTaskListener& listener) :
+            file_(file), listener_(listener) {
             static_assert(DATA_TUPLES_CHACHE_LENGTH && !(DATA_TUPLES_CHACHE_LENGTH & (DATA_TUPLES_CHACHE_LENGTH - 1)));  // Power of two
 			static_assert(sizeof(T) && !(sizeof(T) & (sizeof(T) - 1)));
             initialize();
@@ -37,43 +68,58 @@ class CircularBidirectionalFilereaderBuffer {
             filePointer_ = top_;
         }
         
-        bool getNext(T &ele) {
+        /**
+        * @return @see CacheState_t
+        */
+        CacheState_t getNext(T& ele) {
+            CacheState_t retVal{ CacheState_t::OK };
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
             ele = data_[base_];
             base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {
-                fillUpwards();
+                listener_.requestFill(true);
             }
-            return top_ < topOfFile_;  // TODO noch nicht ganz richtig
-        }
-        
-        bool getPrev(T &ele) {
-            base_ = (base_ + ((DATA_TUPLES_CHACHE_LENGTH - 1))) % DATA_TUPLES_CHACHE_LENGTH;
-            ele = data_[base_];
-            if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4) {
-                fillDownwards();
+            if (top_ == topOfFile_) {
+                retVal = CacheState_t::END_OF_FILE;
             }
-            return bottom_ > 0;  // TODO noch nicht ganz richtig
+            else if (top_ > topOfFile_) {
+                retVal = CacheState_t::CACHE_OVERFLOW;
+            }
+            else if (fillLevelUp() <= 1) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
+                retVal = CacheState_t::ALMOST_EMPTY;
+            }
+            return retVal;
         }
 
-    private:
-
-		friend class UnitTest1::UnitTest;
-
-        unsigned int base() {return filePointer_ & (DATA_TUPLES_CHACHE_LENGTH - 1);}
-
-        /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
-        size_t fillLevelUp() {
-            // Casting zu int, damit Überlauf-Arithmetik definiert funktioniert (Überlauf bei unsigned wäre UB):.
-            return static_cast<size_t>(static_cast<int>(top_ & (DATA_TUPLES_CHACHE_LENGTH - 1)) - static_cast<int>(base_));
-        }
-        
-        size_t fillLevelDown() {
-            return static_cast<size_t>(static_cast<int>(base_) - static_cast<int>(bottom_)) & (DATA_TUPLES_CHACHE_LENGTH - 1);
+        /**
+         * @return @see CacheState_t
+         */
+        CacheState_t getPrev(T& ele) {
+            CacheState_t retVal{ CacheState_t::OK };
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
+            if (bottom_ == 0 && base_ == 0) {
+                retVal = retVal = CacheState_t::CACHE_OVERFLOW;
+            }
+            else {
+                base_ = (base_ + ((DATA_TUPLES_CHACHE_LENGTH - 1))) % DATA_TUPLES_CHACHE_LENGTH;
+                ele = data_[base_];
+                if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4 && bottom_ > 0) {
+                    listener_.requestFill(false);
+                }
+                if (bottom_ == 0 && base_ == 0) {
+                    retVal = CacheState_t::END_OF_FILE;
+                }
+                else if (fillLevelDown() <= 1 && bottom_ > 0) {
+                    retVal = CacheState_t::ALMOST_EMPTY;
+                }
+            }
+            return retVal;
         }
 
         void fillUpwards() {
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
             size_t top_in_cache = top_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
-            size_t space_in_cache = DATA_TUPLES_CHACHE_LENGTH - top_in_cache;
+            size_t space_in_cache = (DATA_TUPLES_CHACHE_LENGTH - top_in_cache) % DATA_TUPLES_CHACHE_LENGTH;
             size_t remaining{0};  // Anzahl, die nach Erreichen der Decke des Caches, am Anfang noch eingefügt werden müssen
             if (space_in_cache < DATA_TUPLES_CHACHE_LENGTH / 4) {
                 remaining = DATA_TUPLES_CHACHE_LENGTH / 4 - space_in_cache;
@@ -87,6 +133,7 @@ class CircularBidirectionalFilereaderBuffer {
         }
         
         void fillDownwards() {
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
             size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
             size_t space_in_cache = bottom_in_cache;
             size_t remaining{0};
@@ -113,7 +160,31 @@ class CircularBidirectionalFilereaderBuffer {
             top_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH;
             filePointer_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH / 4;
         }
+
+        /** Zugriff auf top_ für Testzwecke */
+        auto top() const {
+            return top_;
+        }
+
+        /** Zugriff auf top_ für Testzwecke */
+        auto bottom() const {
+            return bottom_;
+        }
         
+    private:
+
+        friend class UnitTest;
+
+        /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
+        size_t fillLevelUp() const {
+            // Casting zu int, damit Überlauf-Arithmetik definiert funktioniert (Überlauf bei unsigned wäre UB):.
+            return static_cast<size_t>(static_cast<int>(top_ % DATA_TUPLES_CHACHE_LENGTH) - static_cast<int>(base_));
+        }
+
+        size_t fillLevelDown() const {
+            return static_cast<size_t>(static_cast<int>(base_) - static_cast<int>(bottom_)) & (DATA_TUPLES_CHACHE_LENGTH - 1);
+        }
+
         size_t read_with_eof_check(void *data, size_t elementSize, size_t N, FILE *f) {
             if (N > topOfFile_ - top_) {
                 N = topOfFile_ - top_;
@@ -128,15 +199,17 @@ class CircularBidirectionalFilereaderBuffer {
 
         T data_[DATA_TUPLES_CHACHE_LENGTH];
         FILE *file_;
+        IBackgroundTaskListener& listener_;
         /** Totale Anzahl Elemente im File. Wird runtergesetzt, sobald EOF erreicht wird. */
-        unsigned int topOfFile_{ std::numeric_limits<unsigned int>::max() };
+        size_t topOfFile_{ std::numeric_limits<unsigned int>::max() };
         /** Lese-Pointer im Cache */
         size_t base_;
         /** Lese-Pointer in der Datei */
         size_t filePointer_;
         /** höchster Element-Index im Cache */
-        unsigned int top_;
+        size_t top_;
         size_t bottom_;
+        std::recursive_mutex mutex_;
 };
 
 #endif
