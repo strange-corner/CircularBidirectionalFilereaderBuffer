@@ -31,10 +31,11 @@ namespace UnitTest1
 
 		TEST_METHOD(Method1) {
 
-			const unsigned int N_ELEMENTS_IN_TESTFILE{8192};
-			const unsigned int CACHE_LEN{ 1024 };
-			FILE *f;
+			const  size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
+			const  size_t CACHE_LEN{ 1024u };
+			FILE* f{nullptr};
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
+			Assert::IsNotNull(f);
 			Assert::AreEqual(NULL, err);
 			TestListener testListener;
 			typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
@@ -119,7 +120,7 @@ namespace UnitTest1
 				}
 			}
 
-			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_;
+			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{nullptr};
 		};
 
 	};

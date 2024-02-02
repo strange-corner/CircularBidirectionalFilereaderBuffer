@@ -49,3 +49,4 @@ jobs:
           testAssembly: UnitTest1.dll
           searchFolder: x64\Release\
           runInParallel: false
+          codeCoverageEnabled: true
