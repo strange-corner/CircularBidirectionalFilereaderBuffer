@@ -48,7 +48,6 @@ namespace UnitTest1
 			Assert::AreEqual<int>(0, value);
 			int newValue;
 			while (state == Testee_t::CacheState_t::OK) {
-				printf("%d", value);
 				state = testee.getNext(newValue);
 				Assert::AreEqual<int>(value + 1, newValue);
 				value = newValue;
@@ -86,7 +85,6 @@ namespace UnitTest1
 			// Jetzt sollte das oberste Viertel des Caches mit den nächsten Daten gefüllt worden sein:
 			// Rest abfragen
 			while (state == Testee_t::CacheState_t::OK) {
-				printf("%d", value);
 				state = testee.getPrev(newValue);
 				Assert::AreEqual<int>(value - 1, newValue);
 				value = newValue;
