@@ -29,15 +29,21 @@ namespace UnitTest1
 {
 	TEST_CLASS(UnitTest) {
 
-		TEST_METHOD(Method1) {
+		TEST_METHOD(Simple) {
+			TestListener testListenerSimple;
+			MyTest(testListenerSimple);
+		}
+
+	private:
+
+		void MyTest(CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener &testListener) {
 
 			const  size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
 			const  size_t CACHE_LEN{ 1024u };
-			FILE* f{nullptr};
+			FILE* f{ nullptr };
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
 			Assert::IsNotNull(f);
 			Assert::AreEqual(NULL, err);
-			TestListener testListener;
 			typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
 			Testee_t testee{ f, testListener };
 			testListener.initialize(&testee);
@@ -61,7 +67,7 @@ namespace UnitTest1
 			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
 			Assert::AreEqual<int>(newValue + 1, value);
 			value = newValue;
-			
+
 			// Rückwärts eine halbe Cache-Länge lesen (-1 weil schon eins gelesen):
 			for (unsigned int i = 0; i < CACHE_LEN / 2 - 2; i++) {
 				state = testee.getPrev(newValue);
@@ -102,8 +108,6 @@ namespace UnitTest1
 			fclose(f);
 
 		}
-
-	private:
 
 		/**
 		 * Einfacher Testlistener, der die nötigen Aufrufe direkt aus dem Listener macht. In echt müsste

@@ -46,6 +46,8 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
              * @param up true, wenn fillUpwards aufgerufen werden soll. false, wenn fillDownwards aufgerufen werden soll
              */
             virtual void requestFill(bool up) = 0;
+
+            virtual bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>*) = 0;
         };
 
         /**
