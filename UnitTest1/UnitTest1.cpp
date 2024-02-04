@@ -33,10 +33,16 @@ namespace UnitTest1
 			TestListener testListenerSimple;
 			MyTest(testListenerSimple);
 		}
+		
+		TEST_METHOD(Threaded) {
+			ThreadedTestListener testListenerTh;
+			MyTest(testListenerTh);
+		}
 
 	private:
 
 		void MyTest(CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener &testListener) {
+			using namespace std::chrono_literals;
 
 			const  size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
 			const  size_t CACHE_LEN{ 1024u };
@@ -90,6 +96,7 @@ namespace UnitTest1
 			// Das data_-Array enthält die <CACHE_LEN> höchsten Werte:
 			// Beim nächsten sollte unten aufgefüllt werden
 			state = testee.getPrev(newValue);
+			std::this_thread::sleep_for(10ms);  // TODO saubere Synchronisation
 			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, testee.bottom(), L"bottom_ um einen Viertel runtergewandert");
 			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, testee.top());
 			Assert::AreEqual<int>(newValue + 1, value);
@@ -150,7 +157,8 @@ namespace UnitTest1
 			virtual ~ThreadedTestListener() {
 				keepRunning = false;
 				cv.notify_one();
-				thread_.join();
+				thread_->join();
+				delete thread_;
 			}
 
 			virtual void requestFill(bool up) override {
@@ -160,6 +168,7 @@ namespace UnitTest1
 
 			bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* testee) {
 				p_testee_ = testee;
+				thread_ = new std::thread(&ThreadedTestListener::run, this);
 				std::this_thread::yield();
 				return true;
 			}
@@ -169,8 +178,8 @@ namespace UnitTest1
 			void run() {
 				while (keepRunning) {
 					{
-						//std::unique_lock lock{ p_testee_->getLock() };
-						//cv.wait(lock);
+						std::unique_lock lock{ p_testee_->getLock() };
+						cv.wait(lock);
 						if (fillRequestDirectionUp_) {
 							p_testee_->fillUpwards();
 						}
@@ -182,7 +191,7 @@ namespace UnitTest1
 			}
 
 			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{ nullptr };
-			std::thread thread_{ &ThreadedTestListener::run, this };
+			std::thread* thread_;
 			std::condition_variable cv;
 			bool keepRunning{ true };
 			bool fillRequestDirectionUp_{ false };
