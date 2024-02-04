@@ -79,7 +79,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
         */
         CacheState_t getNext(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard lock{ mutex_ };
+            std::lock_guard<std::mutex> lock{ mutex_ };
             base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {
                 listener_.requestFill(true);
@@ -102,7 +102,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
          */
         CacheState_t getPrev(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard lock{ mutex_ };
+            std::lock_guard<std::mutex> lock{ mutex_ };
             if (bottom_ == 0 && base_ == 0) {
                 retVal = retVal = CacheState_t::CACHE_OVERFLOW;
             }
