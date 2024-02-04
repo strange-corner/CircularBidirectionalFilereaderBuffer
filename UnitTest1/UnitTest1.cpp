@@ -178,7 +178,7 @@ namespace UnitTest1
 			void run() {
 				while (keepRunning) {
 					{
-						std::unique_lock lock{ p_testee_->getLock() };
+						std::unique_lock<std::mutex> lock{ p_testee_->getLock() };
 						cv.wait(lock);
 						if (fillRequestDirectionUp_) {
 							p_testee_->fillUpwards();
