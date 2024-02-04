@@ -40,29 +40,34 @@ namespace UnitTest1
 			TestListener testListener;
 			typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
 			Testee_t testee{ f, testListener };
-			testListener.p_testee_ = &testee;
+			testListener.initialize(&testee);
 			Assert::AreEqual<size_t>(512u, testee.top(), L"ungleich");
 			int value;
-			Testee_t::CacheState_t state = testee.getNext(value);
-			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
+			testee.getCurrent(value);
 			Assert::AreEqual<int>(0, value);
 			int newValue;
+			Testee_t::CacheState_t state = Testee_t::CacheState_t::OK;
 			while (state == Testee_t::CacheState_t::OK) {
 				state = testee.getNext(newValue);
 				Assert::AreEqual<int>(value + 1, newValue);
 				value = newValue;
+				Assert::IsTrue(testee.fillLevelUp() <= CACHE_LEN);
 			}
+			Assert::AreEqual(Testee_t::CacheState_t::END_OF_FILE, state);
+			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - 1, value);
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top(), L"End of file");
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom(), L"End of file");
-			state = testee.getPrev(value);
+			state = testee.getPrev(newValue);
 			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
-			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - 1, value);
+			Assert::AreEqual<int>(newValue + 1, value);
+			value = newValue;
 			
-			// Rückwärts eine halbe Cache-Länge lesen:
-			for (unsigned int i = 0; i < CACHE_LEN / 2 - 1; i++) {
+			// Rückwärts eine halbe Cache-Länge lesen (-1 weil schon eins gelesen):
+			for (unsigned int i = 0; i < CACHE_LEN / 2 - 2; i++) {
 				state = testee.getPrev(newValue);
 				Assert::AreEqual<int>(newValue + 1, value);
 				value = newValue;
+				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
 			}
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top());
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom());
@@ -72,6 +77,7 @@ namespace UnitTest1
 				state = testee.getPrev(newValue);
 				Assert::AreEqual<int>(newValue + 1, value);
 				value = newValue;
+				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
 			}
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top(), L"Inzwischen wurde nicht gefüllt");
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom(), L"Inzwischen wurde nicht gefüllt");
@@ -88,6 +94,7 @@ namespace UnitTest1
 				state = testee.getPrev(newValue);
 				Assert::AreEqual<int>(value - 1, newValue);
 				value = newValue;
+				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
 			}
 			Assert::AreEqual<size_t>(CACHE_LEN, testee.top(), L"");
 			Assert::AreEqual<size_t>(0, testee.bottom(), L"");
@@ -118,7 +125,64 @@ namespace UnitTest1
 				}
 			}
 
+			bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* t) {
+				p_testee_ = t;
+				return true;
+			}
+
+		private:
+			
 			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{nullptr};
+		};
+
+		/**
+		 * Threaded TestListener
+		 */
+		class ThreadedTestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
+		public:
+
+			ThreadedTestListener() {}
+
+			virtual ~ThreadedTestListener() {
+				keepRunning = false;
+				cv.notify_one();
+				thread_.join();
+			}
+
+			virtual void requestFill(bool up) override {
+				fillRequestDirectionUp_ = up;
+				cv.notify_one();
+			}
+
+			bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* testee) {
+				p_testee_ = testee;
+				std::this_thread::yield();
+				return true;
+			}
+
+		private:
+
+			void run() {
+				while (keepRunning) {
+					{
+						//std::unique_lock lock{ p_testee_->getLock() };
+						//cv.wait(lock);
+						if (fillRequestDirectionUp_) {
+							p_testee_->fillUpwards();
+						}
+						else {
+							p_testee_->fillDownwards();
+						}
+					}
+				}
+			}
+
+			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{ nullptr };
+			std::thread thread_{ &ThreadedTestListener::run, this };
+			std::condition_variable cv;
+			bool keepRunning{ true };
+			bool fillRequestDirectionUp_{ false };
+
 		};
 
 	};

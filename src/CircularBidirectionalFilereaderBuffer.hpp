@@ -22,7 +22,7 @@ class CircularBidirectionalFilereaderBuffer {
 
         /**
          * OK Alles gut
-         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache. Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
+s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im File). Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
          * END_OF_FILE ele ist der letzte vorhandene Wert in dieser Richtung. Also der letzte in der Datei.
          * CACHE_OVERFLOWB Kein Wert mehr vorhanden
          */
@@ -68,26 +68,30 @@ class CircularBidirectionalFilereaderBuffer {
             filePointer_ = top_;
         }
         
+        void getCurrent(T& ele) const {
+            ele = data_[base_];
+        }
+
         /**
         * @return @see CacheState_t
         */
         CacheState_t getNext(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
             std::lock_guard<std::recursive_mutex> lock{ mutex_ };
-            ele = data_[base_];
             base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {
                 listener_.requestFill(true);
             }
-            if (top_ == topOfFile_) {
+            if (top_ == topOfFile_ && base_ == DATA_TUPLES_CHACHE_LENGTH - 1) {
                 retVal = CacheState_t::END_OF_FILE;
             }
             else if (top_ > topOfFile_) {
                 retVal = CacheState_t::CACHE_OVERFLOW;
             }
-            else if (fillLevelUp() <= 1) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
+            else if (fillLevelUp() <= 0 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
                 retVal = CacheState_t::ALMOST_EMPTY;
             }
+            ele = data_[base_];
             return retVal;
         }
 
@@ -173,12 +177,12 @@ class CircularBidirectionalFilereaderBuffer {
         
     private:
 
-        friend class UnitTest;
+        friend class UnitTest1::UnitTest;
 
         /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
         size_t fillLevelUp() const {
             // Casting zu int, damit Überlauf-Arithmetik definiert funktioniert (Überlauf bei unsigned wäre UB):.
-            return static_cast<size_t>(static_cast<int>(top_ % DATA_TUPLES_CHACHE_LENGTH) - static_cast<int>(base_));
+            return static_cast<size_t>((static_cast<int>(top_ % DATA_TUPLES_CHACHE_LENGTH) - static_cast<int>(base_) + DATA_TUPLES_CHACHE_LENGTH) % DATA_TUPLES_CHACHE_LENGTH);
         }
 
         size_t fillLevelDown() const {
