@@ -122,47 +122,53 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
             return retVal;
         }
 
+        /** Füllt den Cache aufwärts um einen Viertel der Gesamtlänge. */
         void fillUpwards() {
-            size_t top_in_cache = top_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
-            size_t space_in_cache = (DATA_TUPLES_CHACHE_LENGTH - top_in_cache) % DATA_TUPLES_CHACHE_LENGTH;
-            size_t remaining{0};  // Anzahl, die nach Erreichen der Decke des Caches, am Anfang noch eingefügt werden müssen
-            if (space_in_cache < DATA_TUPLES_CHACHE_LENGTH / 4) {
-                remaining = DATA_TUPLES_CHACHE_LENGTH / 4 - space_in_cache;
+            if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillUpwards - Aufrufe abfangen
+                size_t top_in_cache = top_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
+                size_t space_in_cache = (DATA_TUPLES_CHACHE_LENGTH - top_in_cache) % DATA_TUPLES_CHACHE_LENGTH;
+                size_t remaining{0};  // Anzahl, die nach Erreichen der Decke des Caches, am Anfang noch eingefügt werden müssen
+                if (space_in_cache < DATA_TUPLES_CHACHE_LENGTH / 4) {
+                    remaining = DATA_TUPLES_CHACHE_LENGTH / 4 - space_in_cache;
+                }
+                top_ += read_with_eof_check(data_ + top_in_cache, sizeof(T), space_in_cache, file_);
+                if (remaining > 0) {
+                    top_ += read_with_eof_check(data_, sizeof(T), remaining, file_);
+                }
+                filePointer_ = top_;
+                bottom_ = top_ - DATA_TUPLES_CHACHE_LENGTH;
             }
-            top_ += read_with_eof_check(data_ + top_in_cache, sizeof(T), space_in_cache, file_);
-            if (remaining > 0) {
-                top_ += read_with_eof_check(data_, sizeof(T), remaining, file_);
-            }
-            filePointer_ = top_;
-            bottom_ = top_ - DATA_TUPLES_CHACHE_LENGTH;
         }
         
+        /** Füllt den Cache abwärts um einen Viertel der Gesamtlänge. */
         void fillDownwards() {
-            size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
-            size_t space_in_cache = bottom_in_cache;
-            size_t remaining{0};
-            size_t destPtrInCache;
-            size_t nToCopy;
-            if (space_in_cache < DATA_TUPLES_CHACHE_LENGTH / 4) {
-				// there is less than a quarter space left in chache in down direction
-                remaining = DATA_TUPLES_CHACHE_LENGTH / 4 - space_in_cache;
-                destPtrInCache = 0;
-                nToCopy = space_in_cache;
-            } else {
-				// there is plenty of space left in down direction
-                destPtrInCache = bottom_in_cache - DATA_TUPLES_CHACHE_LENGTH / 4;
-                nToCopy = DATA_TUPLES_CHACHE_LENGTH / 4;
+            if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillDownwards - Aufrufe abfangen
+                size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
+                size_t space_in_cache = bottom_in_cache;
+                size_t remaining{0};
+                size_t destPtrInCache;
+                size_t nToCopy;
+                if (space_in_cache < DATA_TUPLES_CHACHE_LENGTH / 4) {
+                    // there is less than a quarter space left in chache in down direction
+                    remaining = DATA_TUPLES_CHACHE_LENGTH / 4 - space_in_cache;
+                    destPtrInCache = 0;
+                    nToCopy = space_in_cache;
+                } else {
+                    // there is plenty of space left in down direction
+                    destPtrInCache = bottom_in_cache - DATA_TUPLES_CHACHE_LENGTH / 4;
+                    nToCopy = DATA_TUPLES_CHACHE_LENGTH / 4;
+                }
+                size_t newBottom = bottom_ - nToCopy;
+                int offset = -static_cast<int>(filePointer_ - newBottom);
+                fseek(file_, offset * sizeof(T), SEEK_CUR);
+                bottom_ -= fread(data_ + destPtrInCache, sizeof(T), nToCopy, file_);
+                if (remaining > 0) {
+                    fseek(file_, -static_cast<int>(nToCopy + remaining) * sizeof(T), SEEK_CUR);
+                    bottom_ -= fread(data_ + DATA_TUPLES_CHACHE_LENGTH - remaining, sizeof(T), remaining, file_);
+                }
+                top_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH;
+                filePointer_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH / 4;
             }
-            size_t newBottom = bottom_ - nToCopy;
-            int offset = -static_cast<int>(filePointer_ - newBottom);
-            fseek(file_, offset * sizeof(T), SEEK_CUR);
-            bottom_ -= fread(data_ + destPtrInCache, sizeof(T), nToCopy, file_);
-            if (remaining > 0) {
-                fseek(file_, -static_cast<int>(nToCopy + remaining) * sizeof(T), SEEK_CUR);
-                bottom_ -= fread(data_ + DATA_TUPLES_CHACHE_LENGTH - remaining, sizeof(T), remaining, file_);
-            }
-            top_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH;
-            filePointer_ = bottom_ + DATA_TUPLES_CHACHE_LENGTH / 4;
         }
 
         /** Zugriff auf top_ für Testzwecke */

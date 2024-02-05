@@ -31,89 +31,99 @@ namespace UnitTest1
 
 		TEST_METHOD(Simple) {
 			TestListener testListenerSimple;
-			MyTest(testListenerSimple);
+			setup(testListenerSimple);
+			MyTest();
+			tearDown();
 		}
 		
 		TEST_METHOD(Threaded) {
 			ThreadedTestListener testListenerTh;
-			MyTest(testListenerTh);
+			setup(testListenerTh);
+			MyTest();
+			testListenerTh.tearDown();  // diesen Beenden bevor der Testee gelöscht wird.
+			tearDown();
 		}
 
 	private:
 
-		void MyTest(CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener &testListener) {
-			using namespace std::chrono_literals;
+		static const size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
+		static const size_t CACHE_LEN{ 1024u };
+		typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
 
-			const  size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
-			const  size_t CACHE_LEN{ 1024u };
-			FILE* f{ nullptr };
+		void setup(CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener& testListener) {
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
 			Assert::IsNotNull(f);
 			Assert::AreEqual(NULL, err);
-			typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
-			Testee_t testee{ f, testListener };
-			testListener.initialize(&testee);
-			Assert::AreEqual<size_t>(512u, testee.top(), L"ungleich");
+			p_testee_ = new Testee_t(f, testListener);
+			testListener.initialize(p_testee_);
+		}
+
+		void tearDown() {
+			fclose(f);
+			delete p_testee_;
+			p_testee_ = nullptr;
+		}
+
+		void MyTest() {
+			using namespace std::chrono_literals;	
+			Assert::AreEqual<size_t>(512u, p_testee_->top(), L"ungleich");
 			int value;
-			testee.getCurrent(value);
+			p_testee_->getCurrent(value);
 			Assert::AreEqual<int>(0, value);
 			int newValue;
 			Testee_t::CacheState_t state = Testee_t::CacheState_t::OK;
 			while (state == Testee_t::CacheState_t::OK) {
-				state = testee.getNext(newValue);
+				state = p_testee_->getNext(newValue);
 				Assert::AreEqual<int>(value + 1, newValue);
 				value = newValue;
-				Assert::IsTrue(testee.fillLevelUp() <= CACHE_LEN);
+				Assert::IsTrue(p_testee_->fillLevelUp() <= CACHE_LEN);
 			}
 			Assert::AreEqual(Testee_t::CacheState_t::END_OF_FILE, state);
 			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - 1, value);
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top(), L"End of file");
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom(), L"End of file");
-			state = testee.getPrev(newValue);
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top(), L"End of file");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom(), L"End of file");
+			state = p_testee_->getPrev(newValue);
 			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
 			Assert::AreEqual<int>(newValue + 1, value);
 			value = newValue;
 
 			// Rückwärts eine halbe Cache-Länge lesen (-1 weil schon eins gelesen):
 			for (unsigned int i = 0; i < CACHE_LEN / 2 - 2; i++) {
-				state = testee.getPrev(newValue);
+				state = p_testee_->getPrev(newValue);
 				Assert::AreEqual<int>(newValue + 1, value);
 				value = newValue;
-				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
+				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top());
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom());
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top());
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom());
 
 			// Rückwärts ein weiteres Cache-Viertel lesen:
 			for (unsigned int i = 0; i < CACHE_LEN / 4; i++) {
-				state = testee.getPrev(newValue);
+				state = p_testee_->getPrev(newValue);
 				Assert::AreEqual<int>(newValue + 1, value);
 				value = newValue;
-				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
+				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, testee.top(), L"Inzwischen wurde nicht gefüllt");
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, testee.bottom(), L"Inzwischen wurde nicht gefüllt");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top(), L"Inzwischen wurde nicht gefüllt");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom(), L"Inzwischen wurde nicht gefüllt");
 			// Das data_-Array enthält die <CACHE_LEN> höchsten Werte:
 			// Beim nächsten sollte unten aufgefüllt werden
-			state = testee.getPrev(newValue);
+			state = p_testee_->getPrev(newValue);
 			std::this_thread::sleep_for(10ms);  // TODO saubere Synchronisation
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, testee.bottom(), L"bottom_ um einen Viertel runtergewandert");
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, testee.top());
+			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, p_testee_->bottom(), L"bottom_ um einen Viertel runtergewandert");
+			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, p_testee_->top());
 			Assert::AreEqual<int>(newValue + 1, value);
 			value = newValue;
 			// Jetzt sollte das oberste Viertel des Caches mit den nächsten Daten gefüllt worden sein:
 			// Rest abfragen
 			while (state == Testee_t::CacheState_t::OK) {
-				state = testee.getPrev(newValue);
+				state = p_testee_->getPrev(newValue);
 				Assert::AreEqual<int>(value - 1, newValue);
 				value = newValue;
-				Assert::IsTrue(testee.fillLevelDown() <= CACHE_LEN);
+				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(CACHE_LEN, testee.top(), L"");
-			Assert::AreEqual<size_t>(0, testee.bottom(), L"");
-
-			fclose(f);
-
+			Assert::AreEqual<size_t>(CACHE_LEN, p_testee_->top(), L"");
+			Assert::AreEqual<size_t>(0, p_testee_->bottom(), L"");
 		}
 
 		/**
@@ -146,57 +156,63 @@ namespace UnitTest1
 			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{nullptr};
 		};
 
-		/**
-		 * Threaded TestListener
-		 */
-		class ThreadedTestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
-		public:
+			/**
+			 * Threaded TestListener
+			 */
+			class ThreadedTestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
+			public:
 
-			ThreadedTestListener() {}
+				ThreadedTestListener() {}
 
-			virtual ~ThreadedTestListener() {
-				keepRunning = false;
-				cv.notify_one();
-				thread_->join();
-				delete thread_;
-			}
+				virtual ~ThreadedTestListener() {
+					delete thread_;
+				}
 
-			virtual void requestFill(bool up) override {
-				fillRequestDirectionUp_ = up;
-				cv.notify_one();
-			}
+				virtual void requestFill(bool up) override {
+					fillRequestDirectionUp_ = up;
+					cv.notify_one();
+				}
 
-			bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* testee) {
-				p_testee_ = testee;
-				thread_ = new std::thread(&ThreadedTestListener::run, this);
-				std::this_thread::yield();
-				return true;
-			}
+				bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* testee) {
+					p_testee_ = testee;
+					thread_ = new std::thread(&ThreadedTestListener::run, this);
+					std::this_thread::yield();
+					return true;
+				}
 
-		private:
+				void tearDown() {
+					keepRunning = false;
+					cv.notify_one();
+					thread_->join();
+				}
 
-			void run() {
-				while (keepRunning) {
-					{
-						std::unique_lock<std::mutex> lock{ p_testee_->getLock() };
-						cv.wait(lock);
-						if (fillRequestDirectionUp_) {
-							p_testee_->fillUpwards();
-						}
-						else {
-							p_testee_->fillDownwards();
+			private:
+
+				void run() {
+					while (keepRunning) {
+						{
+							std::unique_lock<std::mutex> lock{ p_testee_->getLock() };
+							cv.wait(lock);
+							if (fillRequestDirectionUp_) {
+								p_testee_->fillUpwards();
+							}
+							else {
+								p_testee_->fillDownwards();
+							}
 						}
 					}
 				}
-			}
 
-			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{ nullptr };
-			std::thread* thread_;
-			std::condition_variable cv;
-			bool keepRunning{ true };
-			bool fillRequestDirectionUp_{ false };
+				CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{ nullptr };
+				std::thread* thread_;
+				std::condition_variable cv;
+				bool keepRunning{ true };
+				bool fillRequestDirectionUp_{ false };
 
-		};
+			};
+
+			FILE* f{ nullptr };
+			Testee_t *p_testee_{ nullptr };
 
 	};
 
