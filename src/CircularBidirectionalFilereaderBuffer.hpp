@@ -79,21 +79,23 @@ class CircularBidirectionalFilereaderBuffer {
         */
         CacheState_t getNext(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
-            base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
-            if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {
+            bool requestFill{false};
+            {
+                std::lock_guard<std::mutex> lock{mutex_};
+                base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
+                if (top_ == topOfFile_ && base_ == DATA_TUPLES_CHACHE_LENGTH - 1) {
+                    retVal = CacheState_t::END_OF_FILE;
+                } else if (top_ > topOfFile_) {
+                    retVal = CacheState_t::CACHE_OVERFLOW;
+                } else if (fillLevelUp() <= 0 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
+                    retVal = CacheState_t::ALMOST_EMPTY;
+                }
+                ele = data_[base_];
+                requestFill = fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4;
+            }  // lock scope
+            if (requestFill) {
                 listener_.requestFill(true);
             }
-            if (top_ == topOfFile_ && base_ == DATA_TUPLES_CHACHE_LENGTH - 1) {
-                retVal = CacheState_t::END_OF_FILE;
-            }
-            else if (top_ > topOfFile_) {
-                retVal = CacheState_t::CACHE_OVERFLOW;
-            }
-            else if (fillLevelUp() <= 0 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
-                retVal = CacheState_t::ALMOST_EMPTY;
-            }
-            ele = data_[base_];
             return retVal;
         }
 
@@ -102,29 +104,31 @@ class CircularBidirectionalFilereaderBuffer {
          */
         CacheState_t getPrev(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
-            if (bottom_ == 0 && base_ == 0) {
-                retVal = retVal = CacheState_t::CACHE_OVERFLOW;
-            }
-            else {
-                base_ = (base_ + ((DATA_TUPLES_CHACHE_LENGTH - 1))) % DATA_TUPLES_CHACHE_LENGTH;
-                ele = data_[base_];
-                if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4 && bottom_ > 0) {
-                    listener_.requestFill(false);
-                }
+            bool requestFill{false};
+            {
+                std::lock_guard<std::mutex> lock{mutex_};
                 if (bottom_ == 0 && base_ == 0) {
-                    retVal = CacheState_t::END_OF_FILE;
+                    retVal = retVal = CacheState_t::CACHE_OVERFLOW;
+                } else {
+                    base_ = (base_ + ((DATA_TUPLES_CHACHE_LENGTH - 1))) % DATA_TUPLES_CHACHE_LENGTH;
+                    ele = data_[base_];
+                    if (bottom_ == 0 && base_ == 0) {
+                        retVal = CacheState_t::END_OF_FILE;
+                    } else if (fillLevelDown() <= 1 && bottom_ > 0) {
+                        retVal = CacheState_t::ALMOST_EMPTY;
+                    }
+                    requestFill = fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4 && bottom_ > 0;
                 }
-                else if (fillLevelDown() <= 1 && bottom_ > 0) {
-                    retVal = CacheState_t::ALMOST_EMPTY;
-                }
+            }  // lock scope
+            if (requestFill) {
+                listener_.requestFill(false);
             }
             return retVal;
         }
 
         /** Füllt den Cache aufwärts um einen Viertel der Gesamtlänge. */
         void fillUpwards() {
-            std::lock_guard<std::recursive_mutex> lock{mutex_};
+            std::lock_guard<std::mutex> lock{mutex_};
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillUpwards - Aufrufe abfangen
                 size_t top_in_cache = top_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
                 size_t space_in_cache = (DATA_TUPLES_CHACHE_LENGTH - top_in_cache) % DATA_TUPLES_CHACHE_LENGTH;
@@ -143,7 +147,7 @@ class CircularBidirectionalFilereaderBuffer {
         
         /** Füllt den Cache abwärts um einen Viertel der Gesamtlänge. */
         void fillDownwards() {
-            std::lock_guard<std::recursive_mutex> lock{mutex_};
+            std::lock_guard<std::mutex> lock{mutex_};
             if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillDownwards - Aufrufe abfangen
                 size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
                 size_t space_in_cache = bottom_in_cache;
@@ -210,7 +214,7 @@ class CircularBidirectionalFilereaderBuffer {
         /** höchster Element-Index im Cache */
         size_t top_;
         size_t bottom_;
-        std::recursive_mutex mutex_;  // rekursiv für den Fall, wenn fill* direkt aus dem fillRequest aufgerufen wird
+        std::mutex mutex_;  // rekursiv für den Fall, wenn fill* direkt aus dem fillRequest aufgerufen wird
 };
 
 #endif
