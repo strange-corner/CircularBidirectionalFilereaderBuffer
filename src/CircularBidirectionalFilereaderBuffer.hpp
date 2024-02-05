@@ -173,16 +173,6 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
             }
         }
 
-        /** Zugriff auf top_ für Testzwecke */
-        auto top() const {
-            return top_;
-        }
-
-        /** Zugriff auf top_ für Testzwecke */
-        auto bottom() const {
-            return bottom_;
-        }
-
      private:
 
         friend class UnitTest1::UnitTest;

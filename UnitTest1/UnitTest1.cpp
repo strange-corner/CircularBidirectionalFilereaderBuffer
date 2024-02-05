@@ -66,7 +66,7 @@ namespace UnitTest1
 
 		void MyTest() {
 			using namespace std::chrono_literals;	
-			Assert::AreEqual<size_t>(512u, p_testee_->top(), L"ungleich");
+			Assert::AreEqual<size_t>(512u, p_testee_->top_, L"ungleich");
 			int value;
 			p_testee_->getCurrent(value);
 			Assert::AreEqual<int>(0, value);
@@ -80,8 +80,8 @@ namespace UnitTest1
 			}
 			Assert::AreEqual(Testee_t::CacheState_t::END_OF_FILE, state);
 			Assert::AreEqual<unsigned int>(N_ELEMENTS_IN_TESTFILE - 1, value);
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top(), L"End of file");
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom(), L"End of file");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top_, L"End of file");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom_, L"End of file");
 			state = p_testee_->getPrev(newValue);
 			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
 			Assert::AreEqual<int>(newValue + 1, value);
@@ -94,8 +94,8 @@ namespace UnitTest1
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top());
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom());
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top_);
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom_);
 
 			// Rückwärts ein weiteres Cache-Viertel lesen:
 			for (unsigned int i = 0; i < CACHE_LEN / 4; i++) {
@@ -104,14 +104,14 @@ namespace UnitTest1
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top(), L"Inzwischen wurde nicht gefüllt");
-			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom(), L"Inzwischen wurde nicht gefüllt");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE, p_testee_->top_, L"Inzwischen wurde nicht gefüllt");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom_, L"Inzwischen wurde nicht gefüllt");
 			// Das data_-Array enthält die <CACHE_LEN> höchsten Werte:
 			// Beim nächsten sollte unten aufgefüllt werden
 			state = p_testee_->getPrev(newValue);
 			std::this_thread::sleep_for(10ms);  // TODO saubere Synchronisation
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, p_testee_->bottom(), L"bottom_ um einen Viertel runtergewandert");
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, p_testee_->top());
+			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, p_testee_->bottom_, L"bottom_ um einen Viertel runtergewandert");
+			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, p_testee_->top_);
 			Assert::AreEqual<int>(newValue + 1, value);
 			value = newValue;
 			// Jetzt sollte das oberste Viertel des Caches mit den nächsten Daten gefüllt worden sein:
@@ -122,8 +122,8 @@ namespace UnitTest1
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
-			Assert::AreEqual<size_t>(CACHE_LEN, p_testee_->top(), L"");
-			Assert::AreEqual<size_t>(0, p_testee_->bottom(), L"");
+			Assert::AreEqual<size_t>(CACHE_LEN, p_testee_->top_, L"");
+			Assert::AreEqual<size_t>(0, p_testee_->bottom_, L"");
 		}
 
 		/**
