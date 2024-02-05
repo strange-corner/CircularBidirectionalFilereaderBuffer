@@ -22,7 +22,7 @@ class CircularBidirectionalFilereaderBuffer {
 
         /**
          * OK Alles gut
-s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im File). Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
+         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im File). Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
          * END_OF_FILE ele ist der letzte vorhandene Wert in dieser Richtung. Also der letzte in der Datei.
          * CACHE_OVERFLOWB Kein Wert mehr vorhanden
          */
@@ -179,8 +179,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
 
         /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
         size_t fillLevelUp() const {
-            // Casting zu int, damit Überlauf-Arithmetik definiert funktioniert (Überlauf bei unsigned wäre UB):.
-            return static_cast<size_t>((static_cast<int>(top_ % DATA_TUPLES_CHACHE_LENGTH) - static_cast<int>(base_) + DATA_TUPLES_CHACHE_LENGTH) % DATA_TUPLES_CHACHE_LENGTH);
+            return ((top_ % DATA_TUPLES_CHACHE_LENGTH) + DATA_TUPLES_CHACHE_LENGTH - base_) % DATA_TUPLES_CHACHE_LENGTH;
         }
 
         size_t fillLevelDown() const {
