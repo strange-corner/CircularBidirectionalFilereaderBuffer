@@ -5,6 +5,7 @@
 #include <stdio.h> // FILE
 #include <limits>
 #include <mutex>
+#include <cassert>
 
 namespace UnitTest1 {
 	class UnitTest;
@@ -196,7 +197,7 @@ class CircularBidirectionalFilereaderBuffer {
             }
             size_t nRead = fread(data, elementSize, N, f);
             if (nRead < N) {
-                _ASSERT(topOfFile_ == std::numeric_limits<unsigned int>::max());  // sollte nur 1x hier reinkommen.
+                assert(topOfFile_ == std::numeric_limits<unsigned int>::max());  // sollte nur 1x hier reinkommen.
                 topOfFile_ = top_ + nRead;
             }
             return nRead;
