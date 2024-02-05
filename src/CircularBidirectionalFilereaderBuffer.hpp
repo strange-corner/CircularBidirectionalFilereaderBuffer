@@ -79,7 +79,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
         */
         CacheState_t getNext(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard<std::mutex> lock{ mutex_ };
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
             base_ = (base_ + 1) % DATA_TUPLES_CHACHE_LENGTH;
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {
                 listener_.requestFill(true);
@@ -102,7 +102,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
          */
         CacheState_t getPrev(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
-            std::lock_guard<std::mutex> lock{ mutex_ };
+            std::lock_guard<std::recursive_mutex> lock{ mutex_ };
             if (bottom_ == 0 && base_ == 0) {
                 retVal = retVal = CacheState_t::CACHE_OVERFLOW;
             }
@@ -124,6 +124,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
 
         /** Füllt den Cache aufwärts um einen Viertel der Gesamtlänge. */
         void fillUpwards() {
+            std::lock_guard<std::recursive_mutex> lock{mutex_};
             if (fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillUpwards - Aufrufe abfangen
                 size_t top_in_cache = top_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
                 size_t space_in_cache = (DATA_TUPLES_CHACHE_LENGTH - top_in_cache) % DATA_TUPLES_CHACHE_LENGTH;
@@ -142,6 +143,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
         
         /** Füllt den Cache abwärts um einen Viertel der Gesamtlänge. */
         void fillDownwards() {
+            std::lock_guard<std::recursive_mutex> lock{mutex_};
             if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillDownwards - Aufrufe abfangen
                 size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
                 size_t space_in_cache = bottom_in_cache;
@@ -181,11 +183,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
             return bottom_;
         }
 
-        std::mutex &getLock() {
-            return mutex_;
-        }
-        
-    private:
+     private:
 
         friend class UnitTest1::UnitTest;
 
@@ -223,7 +221,7 @@ s         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im Fil
         /** höchster Element-Index im Cache */
         size_t top_;
         size_t bottom_;
-        std::mutex mutex_;
+        std::recursive_mutex mutex_;  // rekursiv für den Fall, wenn fill* direkt aus dem fillRequest aufgerufen wird
 };
 
 #endif
