@@ -30,17 +30,22 @@ namespace UnitTest1
 	TEST_CLASS(UnitTest) {
 
 		TEST_METHOD(Simple) {
-			TestListener testListenerSimple;
-			setup(testListenerSimple);
+			setup();
+			p_testee_ = new Testee_t(f);
+			auto *p_testListener_ = new TestListener(*p_testee_);
 			MyTest();
+			delete p_testListener_;
 			tearDown();
 		}
 		
 		TEST_METHOD(Threaded) {
-			ThreadedTestListener testListenerTh;
-			setup(testListenerTh);
+			printf("hier1");
+			setup();
+			auto *p_testListener_ = new CircularBidirectionalFilereaderBuffer<int, 1024>::DefaultListener(*p_testee_);
 			MyTest();
-			testListenerTh.tearDown();  // diesen Beenden bevor der Testee gelöscht wird.
+			p_testListener_->tearDown();
+			printf("hier");
+			delete p_testListener_;
 			tearDown();
 		}
 
@@ -50,18 +55,16 @@ namespace UnitTest1
 		static const size_t CACHE_LEN{ 1024u };
 		typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
 
-		void setup(CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener& testListener) {
+		void setup() {
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
 			Assert::IsNotNull(f);
-			Assert::AreEqual(NULL, err);
-			p_testee_ = new Testee_t(f, testListener);
-			testListener.initialize(p_testee_);
+			Assert::AreEqual(0, err);
+			p_testee_ = new Testee_t(f);
 		}
 
 		void tearDown() {
-			fclose(f);
 			delete p_testee_;
-			p_testee_ = nullptr;
+			fclose(f);
 		}
 
 		void MyTest() {
@@ -133,88 +136,28 @@ namespace UnitTest1
 		class TestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
 		public:
 
-			TestListener() {}
+			TestListener(CircularBidirectionalFilereaderBuffer<int, 1024> &testee) : testee_(testee) {
+				testee_.setListener(this);
+			}
 
 			virtual ~TestListener() {}
 
 			virtual void requestFill(bool up) override {
 				if (up) {
-					p_testee_->fillUpwards();
+					testee_.fillUpwards();
 				}
 				else {
-					p_testee_->fillDownwards();
+					testee_.fillDownwards();
 				}
-			}
-
-			bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* t) {
-				p_testee_ = t;
-				return true;
 			}
 
 		private:
 			
-			CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{nullptr};
+			CircularBidirectionalFilereaderBuffer<int, 1024> &testee_;
 		};
 
-			/**
-			 * Threaded TestListener
-			 */
-			class ThreadedTestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
-			public:
-
-				ThreadedTestListener() {}
-
-				virtual ~ThreadedTestListener() {
-					delete thread_;
-				}
-
-				virtual void requestFill(bool up) override {
-					fillRequestDirectionUp_ = up;
-					cv.notify_one();
-				}
-
-				bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>* testee) {
-					p_testee_ = testee;
-					thread_ = new std::thread(&ThreadedTestListener::run, this);
-					std::this_thread::yield();
-					return true;
-				}
-
-				void tearDown() {
-					keepRunning = false;
-					cv.notify_one();
-					thread_->join();
-				}
-
-			private:
-
-				void run() {
-					std::mutex mutex;
-					while (keepRunning) {
-						{
-							std::unique_lock<std::mutex> lock{mutex};
-							cv.wait(lock);
-							if (fillRequestDirectionUp_) {
-								p_testee_->fillUpwards();
-							}
-							else {
-								p_testee_->fillDownwards();
-							}
-						}
-					}
-				}
-
-				CircularBidirectionalFilereaderBuffer<int, 1024>* p_testee_{ nullptr };
-				std::thread* thread_;
-				std::condition_variable cv;
-				bool keepRunning{ true };
-				bool fillRequestDirectionUp_{ false };
-
-			};
-
-			FILE* f{ nullptr };
-			Testee_t *p_testee_{ nullptr };
-
+		FILE* f{ nullptr };
+		Testee_t *p_testee_{ nullptr };
 	};
 
 

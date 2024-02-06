@@ -37,7 +37,8 @@ class CircularBidirectionalFilereaderBuffer {
 
         /**
          * Interface zur Benachrichtigung, dass der Cache aufgefüllt werden soll. Also, das aus einem
-         * Worker-Task fillUpwards oder fillDownwards aufgerufen werden soll, um neue Werte bereit zu machen
+         * Worker-Task CircularBidirectionalFilereaderBuffer<T, DATA_TUPLES_CHACHE_LENGTH>#fillUpwards oder CircularBidirectionalFilereaderBuffer<T, DATA_TUPLES_CHACHE_LENGTH>#fillDownwards aufgerufen werden soll, um neue Werte bereit zu machen.
+         * @see DefaultListener Beispiel-/Default-Implementierung
          */
         class IBackgroundTaskListener {
         public:
@@ -48,23 +49,74 @@ class CircularBidirectionalFilereaderBuffer {
              * @param up true, wenn fillUpwards aufgerufen werden soll. false, wenn fillDownwards aufgerufen werden soll
              */
             virtual void requestFill(bool up) = 0;
+        };
 
-            /**
-             * Initialisierung des Listeners. Z.B. Thread starten. 
-             * @param buffer mit dem dieser Listener verbunden wird
-             */            
-            virtual bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024> *buffer) = 0;
+        /**
+         * Diese Implementierung von IBackgroundTaskListener kann standardmässig verwendet werden.
+         */
+        class DefaultListener : public CircularBidirectionalFilereaderBuffer<T, DATA_TUPLES_CHACHE_LENGTH>::IBackgroundTaskListener {
+        public:
+
+            DefaultListener(CircularBidirectionalFilereaderBuffer<T, DATA_TUPLES_CHACHE_LENGTH> &theBuffer) : theBuffer_(theBuffer) {
+                theBuffer_.setListener(this);
+            }
+
+            virtual ~DefaultListener() {
+                assert(!thread_.joinable());  // vorher tearDown aufrufen
+            }
+
+            virtual void requestFill(bool up) override {
+                fillRequestDirectionUp_ = up;
+                cv.notify_one();
+            }
+
+            void tearDown() {
+                keepRunning = false;
+                cv.notify_one();
+                thread_.join();
+            }
+
+        private:
+
+            void run() {
+                while (keepRunning) {
+                    std::mutex mutex;  // eigenen Mutex, damit der des Buffers nicht rekursiv sein muss.
+                    {
+                        std::unique_lock<std::mutex> lock{mutex};
+                        cv.wait(lock);
+                        if (fillRequestDirectionUp_) {
+                            theBuffer_.fillUpwards();
+                        } else {
+                            theBuffer_.fillDownwards();
+                        }
+                    }
+                }
+            }
+
+            CircularBidirectionalFilereaderBuffer<T, DATA_TUPLES_CHACHE_LENGTH> &theBuffer_;
+            std::thread thread_{&DefaultListener::run, this};
+            std::condition_variable cv;
+            bool keepRunning{true};
+            bool fillRequestDirectionUp_{false};
+
         };
 
         /**
          * @param file zum Lesen geöffnete Datei
          * @param listener wird benachrichtigt, wenn der Cache aufgefüllt werden muss
          */
-        CircularBidirectionalFilereaderBuffer(FILE* file, IBackgroundTaskListener& listener) :
-            file_(file), listener_(listener) {
+        CircularBidirectionalFilereaderBuffer(FILE* file) :
+            file_(file) {
             static_assert(DATA_TUPLES_CHACHE_LENGTH && !(DATA_TUPLES_CHACHE_LENGTH & (DATA_TUPLES_CHACHE_LENGTH - 1)));  // Power of two
 			static_assert(sizeof(T) && !(sizeof(T) & (sizeof(T) - 1)));
             initialize();
+        }
+
+        /**
+        * Setzen des Listeners. Muss ausgeführt werden bevor #getNext oder #getPrev aufgerufen werden.
+        */
+        void setListener(IBackgroundTaskListener* l) {
+            listener_ = l;
         }
 
         /**
@@ -90,6 +142,7 @@ class CircularBidirectionalFilereaderBuffer {
         * Rückgabe des nächsten Werts
         * @param[out] ele Der Wert
         * @return @see CacheState_t
+        * @pre #setListener ausgeführt.
         */
         CacheState_t getNext(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
@@ -108,7 +161,7 @@ class CircularBidirectionalFilereaderBuffer {
                 requestFill = fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4;
             }  // lock scope
             if (requestFill) {
-                listener_.requestFill(true);
+                listener_->requestFill(true);
             }
             return retVal;
         }
@@ -137,7 +190,7 @@ class CircularBidirectionalFilereaderBuffer {
                 }
             }  // lock scope
             if (requestFill) {
-                listener_.requestFill(false);
+                listener_->requestFill(false);
             }
             return retVal;
         }
@@ -197,6 +250,7 @@ class CircularBidirectionalFilereaderBuffer {
      private:
 
         friend class UnitTest1::UnitTest;
+        friend class DefaultListener;  // Zugriff auf mutex_
 
         /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
         size_t fillLevelUp() const {
@@ -221,7 +275,7 @@ class CircularBidirectionalFilereaderBuffer {
 
         T data_[DATA_TUPLES_CHACHE_LENGTH];
         FILE *file_;
-        IBackgroundTaskListener& listener_;
+        IBackgroundTaskListener *listener_;
         /** Totale Anzahl Elemente im File. Wird runtergesetzt, sobald EOF erreicht wird. */
         size_t topOfFile_{ std::numeric_limits<unsigned int>::max() };
         /** Lese-Pointer im Cache. Index, der bei getNext ausgegeben wird. */
