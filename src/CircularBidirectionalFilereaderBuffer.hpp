@@ -22,15 +22,16 @@ class CircularBidirectionalFilereaderBuffer {
     public:
 
         /**
-         * OK Alles gut
-         * ALMOST_EMPTY Nur noch ein Wert übrig im Cache (aber noch mehr im File). Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System.
-         * END_OF_FILE ele ist der letzte vorhandene Wert in dieser Richtung. Also der letzte in der Datei.
-         * CACHE_OVERFLOWB Kein Wert mehr vorhanden
+         * Rückgabetyp für getNext und getPrev.
          */
         enum class CacheState_t {
+            /** Alles gut */
             OK,
+            /** Nur noch ein Wert übrig im Cache (aber noch mehr im File). Fill dringend nötig. Sollte eigentlich nicht vorkommen in gut abgestimmtem System. */
             ALMOST_EMPTY,
+            /** ele ist der letzte vorhandene Wert in dieser Richtung. Also der letzte in der Datei. */
             END_OF_FILE,
+            /** Kein Wert mehr vorhanden */
             CACHE_OVERFLOW
         };
 
@@ -48,7 +49,11 @@ class CircularBidirectionalFilereaderBuffer {
              */
             virtual void requestFill(bool up) = 0;
 
-            virtual bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024>*) = 0;
+            /**
+             * Initialisierung des Listeners. Z.B. Thread starten. 
+             * @param buffer mit dem dieser Listener verbunden wird
+             */            
+            virtual bool initialize(CircularBidirectionalFilereaderBuffer<int, 1024> *buffer) = 0;
         };
 
         /**
@@ -74,11 +79,16 @@ class CircularBidirectionalFilereaderBuffer {
             filePointer_ = top_;
         }
         
+        /**
+         * Rückgabe des Elements an der aktuellen Position
+         */
         void getCurrent(T& ele) const {
             ele = data_[base_];
         }
 
         /**
+        * Rückgabe des nächsten Werts
+        * @param[out] ele Der Wert
         * @return @see CacheState_t
         */
         CacheState_t getNext(T& ele) {
@@ -104,8 +114,10 @@ class CircularBidirectionalFilereaderBuffer {
         }
 
         /**
-         * @return @see CacheState_t
-         */
+        * Rückgabe des vorherigen Werts
+        * @param[out] ele Der Wert
+        * @return @see CacheState_t
+        */
         CacheState_t getPrev(T& ele) {
             CacheState_t retVal{ CacheState_t::OK };
             bool requestFill{false};
