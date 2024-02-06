@@ -4,21 +4,25 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 #include "CircularBidirectionalFilereaderBuffer.hpp"
 
+static const size_t CACHE_LEN{ 1024u };
+/** testfile.bin muss Werte dieses Typs in aufsteigender Reihenfolge enthalten */
+typedef int TYPE_OF_DATA;
+
 namespace Microsoft {
 	namespace VisualStudio {
 		namespace CppUnitTestFramework {
 
 			/** @see https://stackoverflow.com/questions/60117597/compare-enum-types */
-			std::wstring ToString(const enum CircularBidirectionalFilereaderBuffer<int, 1024>::CacheState_t &value)
+			std::wstring ToString(const enum CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::CacheState_t &value)
 			{
 				switch (value) {
-				case CircularBidirectionalFilereaderBuffer<int, 1024>::CacheState_t::OK: return L"OK";
-				case CircularBidirectionalFilereaderBuffer<int, 1024>::CacheState_t::ALMOST_EMPTY: return L"ALMOST_EMPTY";
-				case CircularBidirectionalFilereaderBuffer<int, 1024>::CacheState_t::END_OF_FILE: return L"END_OF_FILE";
-				case CircularBidirectionalFilereaderBuffer<int, 1024>::CacheState_t::CACHE_OVERFLOW: return L"CACHE_OVERFLOW";
+				case CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::CacheState_t::OK: return L"OK";
+				case CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::CacheState_t::ALMOST_EMPTY: return L"ALMOST_EMPTY";
+				case CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::CacheState_t::END_OF_FILE: return L"END_OF_FILE";
+				case CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::CacheState_t::CACHE_OVERFLOW: return L"CACHE_OVERFLOW";
 				}
 
-				return std::to_wstring(static_cast<int>(value));
+				return std::to_wstring(static_cast<TYPE_OF_DATA>(value));
 			}
 
 		} // namespace CppUnitTestFramework 
@@ -41,7 +45,7 @@ namespace UnitTest1
 		TEST_METHOD(Threaded) {
 			printf("hier1");
 			setup();
-			auto *p_testListener_ = new CircularBidirectionalFilereaderBuffer<int, 1024>::DefaultListener(*p_testee_);
+			auto *p_testListener_ = new CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::DefaultListener(*p_testee_);
 			MyTest();
 			p_testListener_->tearDown();
 			printf("hier");
@@ -52,8 +56,7 @@ namespace UnitTest1
 	private:
 
 		static const size_t N_ELEMENTS_IN_TESTFILE{ 8192u };
-		static const size_t CACHE_LEN{ 1024u };
-		typedef CircularBidirectionalFilereaderBuffer<int, CACHE_LEN> Testee_t;
+		typedef CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN> Testee_t;
 
 		void setup() {
 			errno_t err = fopen_s(&f, "testfile.bin", "rb");
@@ -70,14 +73,14 @@ namespace UnitTest1
 		void MyTest() {
 			using namespace std::chrono_literals;	
 			Assert::AreEqual<size_t>(512u, p_testee_->top_, L"ungleich");
-			int value;
+			TYPE_OF_DATA value;
 			p_testee_->getCurrent(value);
 			Assert::AreEqual<int>(0, value);
-			int newValue;
+			TYPE_OF_DATA newValue;
 			Testee_t::CacheState_t state = Testee_t::CacheState_t::OK;
 			while (state == Testee_t::CacheState_t::OK) {
 				state = p_testee_->getNext(newValue);
-				Assert::AreEqual<int>(value + 1, newValue);
+				Assert::AreEqual<TYPE_OF_DATA>(value + 1, newValue);
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelUp() <= CACHE_LEN);
 			}
@@ -87,13 +90,13 @@ namespace UnitTest1
 			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN, p_testee_->bottom_, L"End of file");
 			state = p_testee_->getPrev(newValue);
 			Assert::AreEqual(Testee_t::CacheState_t::OK, state);
-			Assert::AreEqual<int>(newValue + 1, value);
+			Assert::AreEqual<TYPE_OF_DATA>(newValue + 1, value);
 			value = newValue;
 
 			// Rückwärts eine halbe Cache-Länge lesen (-1 weil schon eins gelesen):
 			for (unsigned int i = 0; i < CACHE_LEN / 2 - 2; i++) {
 				state = p_testee_->getPrev(newValue);
-				Assert::AreEqual<int>(newValue + 1, value);
+				Assert::AreEqual<TYPE_OF_DATA>(newValue + 1, value);
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
@@ -103,7 +106,7 @@ namespace UnitTest1
 			// Rückwärts ein weiteres Cache-Viertel lesen:
 			for (unsigned int i = 0; i < CACHE_LEN / 4; i++) {
 				state = p_testee_->getPrev(newValue);
-				Assert::AreEqual<int>(newValue + 1, value);
+				Assert::AreEqual<TYPE_OF_DATA>(newValue + 1, value);
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
@@ -113,15 +116,15 @@ namespace UnitTest1
 			// Beim nächsten sollte unten aufgefüllt werden
 			state = p_testee_->getPrev(newValue);
 			std::this_thread::sleep_for(10ms);  // TODO saubere Synchronisation
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN - CACHE_LEN / 4, p_testee_->bottom_, L"bottom_ um einen Viertel runtergewandert");
-			Assert::AreEqual<size_t>(8192 - CACHE_LEN / 4, p_testee_->top_);
-			Assert::AreEqual<int>(newValue + 1, value);
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN - CACHE_LEN / 4, p_testee_->bottom_, L"bottom_ um einen Viertel runtergewandert");
+			Assert::AreEqual<size_t>(N_ELEMENTS_IN_TESTFILE - CACHE_LEN / 4, p_testee_->top_);
+			Assert::AreEqual<TYPE_OF_DATA>(newValue + 1, value);
 			value = newValue;
 			// Jetzt sollte das oberste Viertel des Caches mit den nächsten Daten gefüllt worden sein:
 			// Rest abfragen
 			while (state == Testee_t::CacheState_t::OK) {
 				state = p_testee_->getPrev(newValue);
-				Assert::AreEqual<int>(value - 1, newValue);
+				Assert::AreEqual<TYPE_OF_DATA>(value - 1, newValue);
 				value = newValue;
 				Assert::IsTrue(p_testee_->fillLevelDown() <= CACHE_LEN);
 			}
@@ -133,10 +136,10 @@ namespace UnitTest1
 		 * Einfacher Testlistener, der die nötigen Aufrufe direkt aus dem Listener macht. In echt müsste
 		 * der die Aufrufe aus einem anderen Thread machen
 		 */
-		class TestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
+		class TestListener : public CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::IBackgroundTaskListener {
 		public:
 
-			TestListener(CircularBidirectionalFilereaderBuffer<int, 1024> &testee) : testee_(testee) {
+			TestListener(CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN> &testee) : testee_(testee) {
 				testee_.setListener(this);
 			}
 
@@ -153,7 +156,7 @@ namespace UnitTest1
 
 		private:
 			
-			CircularBidirectionalFilereaderBuffer<int, 1024> &testee_;
+			CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN> &testee_;
 		};
 
 		FILE* f{ nullptr };
