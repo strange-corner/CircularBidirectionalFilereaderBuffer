@@ -75,7 +75,7 @@ namespace UnitTest1
 			Assert::AreEqual<size_t>(512u, p_testee_->top_, L"ungleich");
 			TYPE_OF_DATA value;
 			p_testee_->getCurrent(value);
-			Assert::AreEqual<int>(0, value);
+			Assert::AreEqual<TYPE_OF_DATA>(0, value);
 			TYPE_OF_DATA newValue;
 			Testee_t::CacheState_t state = Testee_t::CacheState_t::OK;
 			while (state == Testee_t::CacheState_t::OK) {
@@ -162,6 +162,4 @@ namespace UnitTest1
 		FILE* f{ nullptr };
 		Testee_t *p_testee_{ nullptr };
 	};
-
-
 }
