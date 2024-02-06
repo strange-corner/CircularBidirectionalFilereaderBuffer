@@ -62,6 +62,9 @@ class CircularBidirectionalFilereaderBuffer {
             initialize();
         }
 
+        /**
+         * Setzt den Cache zurück. Lesezeiger am Anfang des Caches. Cache bis zur Hälfte gefüllt mit Daten aus der Datei.
+         */
         void initialize() {
             filePointer_ = 0;
             base_ = 0;
@@ -165,10 +168,11 @@ class CircularBidirectionalFilereaderBuffer {
                     destPtrInCache = bottom_in_cache - DATA_TUPLES_CHACHE_LENGTH / 4;
                     nToCopy = DATA_TUPLES_CHACHE_LENGTH / 4;
                 }
-                size_t newBottom = bottom_ - nToCopy;
-                int offset = -static_cast<int>(filePointer_ - newBottom);
+                const size_t newBottom = bottom_ - nToCopy;
+                const int offset = -static_cast<int>(filePointer_ - newBottom);
                 fseek(file_, offset * sizeof(T), SEEK_CUR);
                 bottom_ -= fread(data_ + destPtrInCache, sizeof(T), nToCopy, file_);
+                // Im zweiten Schritt am oberen Ende den Rest einfüllen
                 if (remaining > 0) {
                     fseek(file_, -static_cast<int>(nToCopy + remaining) * sizeof(T), SEEK_CUR);
                     bottom_ -= fread(data_ + DATA_TUPLES_CHACHE_LENGTH - remaining, sizeof(T), remaining, file_);
@@ -208,14 +212,15 @@ class CircularBidirectionalFilereaderBuffer {
         IBackgroundTaskListener& listener_;
         /** Totale Anzahl Elemente im File. Wird runtergesetzt, sobald EOF erreicht wird. */
         size_t topOfFile_{ std::numeric_limits<unsigned int>::max() };
-        /** Lese-Pointer im Cache */
+        /** Lese-Pointer im Cache. Index, der bei getNext ausgegeben wird. */
         size_t base_;
-        /** Lese-Pointer in der Datei */
+        /** Lese-Pointer in der Datei. Merkt sich, wo der Lese-Pointer der geöffneten Datei steht. Eigentlich das, was ftell zurückgeben würde. */
         size_t filePointer_;
-        /** höchster Element-Index im Cache */
+        /** höchster Element-Index aus der Datei, der im Cache. Genauer gesagt: 1 höher als der oberste, gültige Wert. */
         size_t top_;
+        /** Niedrigster Element-Index aus der Datei, der im Cache gespeichert ist. */
         size_t bottom_;
-        std::mutex mutex_;  // rekursiv für den Fall, wenn fill* direkt aus dem fillRequest aufgerufen wird
+        std::mutex mutex_;
 };
 
 #endif
