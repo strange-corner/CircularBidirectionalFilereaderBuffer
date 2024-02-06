@@ -40,15 +40,12 @@ namespace UnitTest1
 			MyTest();
 			delete p_testListener_;
 			tearDown();
-		}
-		
+		}		
 		TEST_METHOD(Threaded) {
-			printf("hier1");
 			setup();
 			auto *p_testListener_ = new CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::DefaultListener(*p_testee_);
 			MyTest();
 			p_testListener_->tearDown();
-			printf("hier");
 			delete p_testListener_;
 			tearDown();
 		}
@@ -72,7 +69,7 @@ namespace UnitTest1
 
 		void MyTest() {
 			using namespace std::chrono_literals;	
-			Assert::AreEqual<size_t>(512u, p_testee_->top_, L"ungleich");
+			Assert::AreEqual<size_t>(CACHE_LEN / 2, p_testee_->top_, L"ungleich");
 			TYPE_OF_DATA value;
 			p_testee_->getCurrent(value);
 			Assert::AreEqual<TYPE_OF_DATA>(0, value);
@@ -134,7 +131,7 @@ namespace UnitTest1
 
 		/**
 		 * Einfacher Testlistener, der die nötigen Aufrufe direkt aus dem Listener macht. In echt müsste
-		 * der die Aufrufe aus einem anderen Thread machen
+		 * der die Aufrufe aus einem anderen Thread machen. Als erste Teststufe gut geeignet.
 		 */
 		class TestListener : public CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN>::IBackgroundTaskListener {
 		public:
