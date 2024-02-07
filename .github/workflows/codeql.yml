@@ -23,6 +23,7 @@ jobs:
   build:
       uses: ./.github/workflows/msbuild.yml
   analyze:
+    needs: build
     name: Analyze
     # Runner size impacts CodeQL analysis time. To learn more, please see:
     #   - https://gh.io/recommended-hardware-resources-for-running-codeql
