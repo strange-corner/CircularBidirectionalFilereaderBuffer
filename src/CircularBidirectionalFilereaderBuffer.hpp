@@ -154,11 +154,11 @@ class CircularBidirectionalFilereaderBuffer {
                     retVal = CacheState_t::END_OF_FILE;
                 } else if (top_ > topOfFile_) {
                     retVal = CacheState_t::CACHE_OVERFLOW;
-                } else if (fillLevelUp() <= 1 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
+                } else if (fillLevelUp() <= 1) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
                     retVal = CacheState_t::ALMOST_EMPTY;
                 }
                 ele = data_[base_];
-                requestFill = fillLevelUp() < DATA_TUPLES_CHACHE_LENGTH / 4;
+                requestFill = fillLevelUp() <= DATA_TUPLES_CHACHE_LENGTH / 4;
             }  // lock scope
             if (requestFill) {
                 listener_->requestFill(true);
@@ -186,7 +186,7 @@ class CircularBidirectionalFilereaderBuffer {
                     } else if (fillLevelDown() <= 1 && bottom_ > 0) {
                         retVal = CacheState_t::ALMOST_EMPTY;
                     }
-                    requestFill = fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4 && bottom_ > 0;
+                    requestFill = fillLevelDown() <= DATA_TUPLES_CHACHE_LENGTH / 4 && bottom_ > 0;
                 }
             }  // lock scope
             if (requestFill) {
@@ -217,7 +217,7 @@ class CircularBidirectionalFilereaderBuffer {
         /** Füllt den Cache abwärts um einen Viertel der Gesamtlänge. */
         void fillDownwards() {
             std::lock_guard<std::mutex> lock{mutex_};
-            if (fillLevelDown() < DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillDownwards - Aufrufe abfangen
+            if (fillLevelDown() <= DATA_TUPLES_CHACHE_LENGTH / 4) {  // doppelte fillDownwards - Aufrufe abfangen
                 size_t bottom_in_cache = bottom_ & (DATA_TUPLES_CHACHE_LENGTH - 1);
                 size_t space_in_cache = bottom_in_cache;
                 size_t remaining{0};
