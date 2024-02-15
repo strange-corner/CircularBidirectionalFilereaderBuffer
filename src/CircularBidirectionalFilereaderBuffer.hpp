@@ -154,7 +154,7 @@ class CircularBidirectionalFilereaderBuffer {
                     retVal = CacheState_t::END_OF_FILE;
                 } else if (top_ > topOfFile_) {
                     retVal = CacheState_t::CACHE_OVERFLOW;
-                } else if (fillLevelUp() <= 0 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
+                } else if (fillLevelUp() <= 1 && top_ != topOfFile_) {  // FillLevel erneut abfragen; könnte schon geändert haben (wenn requestFill den fill im gleichen Kontext aufruft.
                     retVal = CacheState_t::ALMOST_EMPTY;
                 }
                 ele = data_[base_];
@@ -252,13 +252,14 @@ class CircularBidirectionalFilereaderBuffer {
         friend class UnitTest1::UnitTest;
         friend class DefaultListener;  // Zugriff auf mutex_
 
-        /** Anzahl Elemente im Cache in Aufwärts-Richtung. */
+        /** Anzahl Elemente im Cache in Aufwärts-Richtung. Inkl. Current Element */
         size_t fillLevelUp() const {
             return ((top_ % DATA_TUPLES_CHACHE_LENGTH) + DATA_TUPLES_CHACHE_LENGTH - base_) % DATA_TUPLES_CHACHE_LENGTH;
         }
 
+        /** Anzahl Elemente im Cache in Abwärts-Richtung. Inkl. Current Element */
         size_t fillLevelDown() const {
-            return static_cast<size_t>(static_cast<int>(base_) - static_cast<int>(bottom_)) & (DATA_TUPLES_CHACHE_LENGTH - 1);
+            return static_cast<size_t>((static_cast<int>(base_) - static_cast<int>(bottom_)) & (DATA_TUPLES_CHACHE_LENGTH - 1)) + 1;
         }
 
         size_t read_with_eof_check(void *data, size_t elementSize, size_t N, FILE *f) {

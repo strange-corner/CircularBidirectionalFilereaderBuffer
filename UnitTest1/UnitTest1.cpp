@@ -35,7 +35,6 @@ namespace UnitTest1
 
 		TEST_METHOD(Simple) {
 			setup();
-			p_testee_ = new Testee_t(f);
 			auto *p_testListener_ = new TestListener(*p_testee_);
 			MyTest();
 			delete p_testListener_;
@@ -47,6 +46,33 @@ namespace UnitTest1
 			MyTest();
 			p_testListener_->tearDown();
 			delete p_testListener_;
+			tearDown();
+		}
+
+		TEST_METHOD(Dummy) {
+			DummyTestListener testListener;
+			setup();
+			p_testee_->setListener(&testListener);
+			// ("zu Beginn halb gefuellt, bei CACHE_LEN/2-2 muss ALMOST_EMPTY gemeldet werden.");
+			// -2, weil getCurrent würde auch noch zählen.
+			int ele;
+			for (unsigned int i = 0; i < CACHE_LEN / 2 - 2; i++) {
+				Assert::AreEqual<Testee_t::CacheState_t>(Testee_t::CacheState_t::OK, p_testee_->getNext(ele));
+			}
+			auto state = p_testee_->getNext(ele);
+			Assert::AreEqual<Testee_t::CacheState_t>(Testee_t::CacheState_t::ALMOST_EMPTY, state);
+			Assert::AreEqual<TYPE_OF_DATA>(CACHE_LEN / 2 - 1, ele);
+			Assert::AreEqual<size_t>(1u, p_testee_->fillLevelUp());
+			// ("dasselbe abwaerts");
+			// -2, weil getCurrent würde auch noch zählen.
+			for (int i = CACHE_LEN / 2 - 2; i > 0; i--) {
+				Assert::AreEqual<Testee_t::CacheState_t>(Testee_t::CacheState_t::OK, p_testee_->getPrev(ele));
+				Assert::AreEqual<TYPE_OF_DATA>(i, ele);
+			}
+			state = p_testee_->getPrev(ele);
+			Assert::AreEqual<Testee_t::CacheState_t>(Testee_t::CacheState_t::END_OF_FILE, state);
+			Assert::AreEqual<TYPE_OF_DATA>(0, ele);
+			Assert::AreEqual<size_t>(1u, p_testee_->fillLevelDown());
 			tearDown();
 		}
 
@@ -154,6 +180,17 @@ namespace UnitTest1
 		private:
 			
 			CircularBidirectionalFilereaderBuffer<TYPE_OF_DATA, CACHE_LEN> &testee_;
+		};
+
+		/**
+		 * Dummy-TestListener, der nichts macht.
+		 */
+		class DummyTestListener : public CircularBidirectionalFilereaderBuffer<int, 1024>::IBackgroundTaskListener {
+		public:
+
+			virtual ~DummyTestListener() {}
+
+			virtual void requestFill(bool) override {}
 		};
 
 		FILE* f{ nullptr };
